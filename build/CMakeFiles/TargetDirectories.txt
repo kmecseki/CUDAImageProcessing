@@ -1,0 +1,4 @@
+/home/kat/Documents/GitHub/CUDAImageProcessing/build/CMakeFiles/cudakernels.dir
+/home/kat/Documents/GitHub/CUDAImageProcessing/build/CMakeFiles/main.dir
+/home/kat/Documents/GitHub/CUDAImageProcessing/build/CMakeFiles/edit_cache.dir
+/home/kat/Documents/GitHub/CUDAImageProcessing/build/CMakeFiles/rebuild_cache.dir
