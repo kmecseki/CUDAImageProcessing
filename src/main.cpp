@@ -47,13 +47,8 @@ int height = inputImage.rows;
 
 std::cout << "Image loaded, width: " << width << ", height: " << height << std::endl;
 
-/* Host memory pointers */
 
 unsigned char *h_rgb = inputImage.data;
-
-
-/* Allocate device memory */
-
 unsigned char *d_rgb, *d_gray;
 cudaCheckError(cudaMalloc((void**) &d_rgb, width * height * 3 * sizeof(unsigned char)));
 cudaCheckError(cudaMalloc((void**) &d_gray, width * height * sizeof(unsigned char)));
@@ -77,22 +72,15 @@ RGBToGrayScale(d_rgb, d_gray, width, height, stream1);
 cudaStream_t stream2;
 cudaCheckError(cudaStreamCreate(&stream2));
 std::cout << "Now Gaussian blur .. " << std::endl;
-float *h_kernel = genKernel(kernel_size, sigma);
+float *h_kernel = new float(kernel_size * kernel_size);
+h_kernel = genKernel(kernel_size, sigma);
 float* d_kernel;
 cudaCheckError(cudaMalloc((void**) &d_kernel, kernel_size * kernel_size * sizeof(float)));
 cudaCheckError(cudaMemcpy(d_kernel, h_kernel, kernel_size * kernel_size * sizeof(float), cudaMemcpyHostToDevice));
-
 unsigned char *d_blur;
 cudaCheckError(cudaMalloc((void**) &d_blur, width * height * sizeof(unsigned char)));
-
-
-
-
 GaussianBlur(d_gray, d_blur, d_kernel, width, height, kernel_size, stream2, sigma);
 
-
-cudaCheckError(cudaStreamSynchronize(stream1));
-cudaCheckError(cudaStreamSynchronize(stream2));
 
 /* Kernel check */
 //float *temp = new float[kernel_size * kernel_size];
@@ -109,14 +97,36 @@ cudaCheckError(cudaStreamSynchronize(stream2));
 //}
 //std::cout << std::endl;
 
+cudaStream_t stream3;
+cudaCheckError(cudaStreamCreate(&stream3));
+unsigned char *d_edge;
+cudaCheckError(cudaMalloc((void**) &d_edge, width * height * sizeof(unsigned char)));
+sobelEdgeDetection(d_blur, d_edge, width, height, stream3);
+
+
+cudaCheckError(cudaStreamSynchronize(stream1));
+cudaCheckError(cudaStreamSynchronize(stream2));
+cudaCheckError(cudaStreamSynchronize(stream3));
+
+
 unsigned char *out = new unsigned char[width * height];
-cudaCheckError(cudaMemcpy(out, d_blur, sizeof(unsigned char) * width * height, cudaMemcpyDeviceToHost));
+cudaCheckError(cudaMemcpy(out, d_edge, sizeof(unsigned char) * width * height, cudaMemcpyDeviceToHost));
 
 cv::Mat endresult(height, width, CV_8UC1, out);
 cv::imwrite(output, endresult);
 
 
-delete out;
+delete[] out;
+delete[] h_kernel;
+cudaCheckError(cudaFree(d_rgb));
+cudaCheckError(cudaFree(d_gray));
+cudaCheckError(cudaFree(d_blur));
+cudaCheckError(cudaFree(d_edge));
+cudaCheckError(cudaFree(d_kernel));
+cudaCheckError(cudaStreamDestroy(stream1));
+cudaCheckError(cudaStreamDestroy(stream2));
+cudaCheckError(cudaStreamDestroy(stream3));
 
+return 0;
 
 }

@@ -96,3 +96,28 @@ void GaussianBlur(const unsigned char *input, unsigned char *output, float *kern
     GaussianBlurKernel<<<grid, block, sharedmem, stream>>>(input, output, kernel, width, height, kernel_size, sigma);
     
 }
+
+
+__global__ void sobelEdgeDetectionKernel(const unsigned char *input, unsigned char *output, int width, int height) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.x * blockDim.x + threadIdx.y;
+
+    if (x>0 && x < (width - 1) && y>0 && y < (height - 1)) {
+        int idx = y * width + x;
+        int gx = -input[(y-1)*width + (x-1)] - 2 * input[(y)*width + (x-1)] - input[(y+1)*width + (x-1)] + input[(y-1)*width + (x+1)] + 2 * input[y*width + (x+1)] + input[(y+1)*width + (x+1)];
+        
+        int gy =  input[(y-1)*width + (x-1)] + 2 * input[(y-1)*width + (x)] + input[(y-1)*width + (x+1)] - input[(y+1)*width + (x-1)] - 2 * input[(y+1)*width + (x)] - input[(y+1)*width + (x+1)];
+        //int gy =  input[(y+1)*width + (x-1)] + 2 * input[(y+1)*width + x] + input[(y+1)*width + (x+1)] - input[(y-1)*width + (x-1)] - 2 * input[(y-1)*width + x] - input[(y-1)*width + (x+1)];
+        /* using abs. approx.: */
+        int G = abs(gx) + abs(gy);
+        output[idx] = G > 255 ? 255 : G;
+    }
+}
+
+
+void sobelEdgeDetection(const unsigned char *input, unsigned char *output, int width, int height, cudaStream_t stream) {
+    dim3 block(16, 16);
+    dim3 grid((width + block.x - 1) / block.x, (height + block.y - 1) / block.y);
+
+    sobelEdgeDetectionKernel<<<grid, block, 0, stream>>>(input, output, width, height);
+}
