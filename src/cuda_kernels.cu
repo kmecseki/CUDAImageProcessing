@@ -9,13 +9,13 @@ __device__ void genKernelKernel(float *kernel, int kernel_size, float sigma) {
     int half = kernel_size/2;
 
     if (idxx < kernel_size && idxy < kernel_size) {
-        kernel[idxy * kernel_size + idxx] = expf(-(idxx-half * idxx-half + idxy-half * idxy-half) / s) / s2;
-        sum += kernel[idxy * kernel_size + idxx];
+        kernel[idxy * kernel_size + idxx] = expf(-((idxx-half) * (idxx-half) + (idxy-half) * (idxy-half)) / s) / s2;
+        //sum += kernel[idxy * kernel_size + idxx];
     }
-
-    if (idxx < kernel_size && idxy < kernel_size) {
-        kernel[idxy * kernel_size + idxx] /= sum;
-    }
+    
+    //if (idxx < kernel_size && idxy < kernel_size) {
+    //    kernel[idxy * kernel_size + idxx] /= sum;
+    //}
 }
 
 
@@ -43,28 +43,56 @@ void RGBToGrayScale(const unsigned char* d_rgb, unsigned char* d_gray, int width
 }
 
 
-__global__ void GaussianBlurKernel(const unsigned char* d_gray, unsigned char *d_blur, int width, int height, int kernel_size) {
-    int a = 1;
+__global__ void GaussianBlurKernel(const unsigned char* input, unsigned char *output, float *kernel, int width, int height, int kernel_size, float sigma) {
+
+    //genKernelKernel(kernel, kernel_size, sigma);
+
+    extern __shared__ unsigned char sharedmem[];
+    int radius = kernel_size/2;
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    int sharedw = blockDim.x + 2 * radius;
+
+    int localX = threadIdx.x + radius;
+    int localY = threadIdx.y + radius;
+
+    if(x < width && y < height) {
+        sharedmem[localY * sharedw + localX] = input[y * width + x];
+        
+        if(threadIdx.x < radius && x >= radius)
+            sharedmem[localY * sharedw + (localX - radius)] = input[y * width + (x - radius)];
+        if(threadIdx.x >= blockDim.x - radius && x + radius < width)
+            sharedmem[localY * sharedw + (localX + radius)] = input[y * width + (x + radius)];
+        if(threadIdx.y < radius && y >= radius)
+            sharedmem[(localY - radius) * sharedw + localX] = input[(y - radius) * width + x];
+        if(threadIdx.y >= blockDim.y - radius && y + radius < height)
+            sharedmem[(localY + radius) * sharedw + localX] = input[(y + radius) * width + x];
+    }
+    __syncthreads();
+
+    if(x < width && y < height) {
+        float sum = 0.0f;
+        for(int ky = -radius; ky <= radius; ky++)
+        {
+            for(int kx = -radius; kx <= radius; kx++)
+            {
+                int imgX = localX + kx;
+                int imgY = localY + ky;
+                sum += kernel[(ky + radius) * kernel_size + (kx + radius)] * sharedmem[imgY * sharedw + imgX];
+            }
+        }
+        output[y * width + x] = static_cast<unsigned char>(min(max(sum, 0.0f), 255.0f));
+    }
 }
 
 
-void GaussianBlur(const unsigned char *d_gray, unsigned char *d_blur, int width, int height, int kernel_size, cudaStream_t stream) {
+void GaussianBlur(const unsigned char *input, unsigned char *output, float *kernel, int width, int height, int kernel_size, cudaStream_t stream, float sigma) {
     dim3 block(16, 16);
     dim3 grid((width + block.x - 1 )/block.x, (height + block.y -1)/block.y);
     /* use shared memory for the image so all threads can work on it fast */
     /* TODO: add check if it fits with current hardware */
     int sharedmem = (block.x + kernel_size) * (block.y + kernel_size);
-    GaussianBlurKernel<<<grid, block, sharedmem, stream>>>(d_gray, d_blur, width, height, kernel_size);
+    GaussianBlurKernel<<<grid, block, sharedmem, stream>>>(input, output, kernel, width, height, kernel_size, sigma);
     
-    
-    
-    dim3 block;
-    if (kernel_size > 8){
-        block = dim3(8, 8);
-    } 
-    else {
-        block = dim3(kernel_size, kernel_size);
-    }
-    dim3 grid()
-
 }

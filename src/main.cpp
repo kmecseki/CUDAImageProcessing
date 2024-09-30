@@ -14,7 +14,7 @@
 #include <opencv2/opencv.hpp>
 #include <iostream>
 #include "image_processing.h"
-#include "utils.cpp"
+#include "utils.h"
 
 int main(int argc, char* argv[]) {
 
@@ -77,23 +77,46 @@ RGBToGrayScale(d_rgb, d_gray, width, height, stream1);
 cudaStream_t stream2;
 cudaCheckError(cudaStreamCreate(&stream2));
 std::cout << "Now Gaussian blur .. " << std::endl;
-//float* d_kernel;
-//float* h_kernel = GenKernel(kernel_size, sigma);
-//cudaCheckError(cudaMalloc((void**) &d_kernel, kernel_size * kernel_size * sizeof(float)));
-//cudaCheckError(cudaMemCpy(d_kernel, h_kernel, kernel_size * kernel_size * sizeof(float)), cudaMemcpyHostToDevice);
-GaussianBlur(d_gray, d_blur, width, height, kernel_size, stream2);
+float *h_kernel = genKernel(kernel_size, sigma);
+float* d_kernel;
+cudaCheckError(cudaMalloc((void**) &d_kernel, kernel_size * kernel_size * sizeof(float)));
+cudaCheckError(cudaMemcpy(d_kernel, h_kernel, kernel_size * kernel_size * sizeof(float), cudaMemcpyHostToDevice));
+
+unsigned char *d_blur;
+cudaCheckError(cudaMalloc((void**) &d_blur, width * height * sizeof(unsigned char)));
+
+
+
+
+GaussianBlur(d_gray, d_blur, d_kernel, width, height, kernel_size, stream2, sigma);
 
 
 cudaCheckError(cudaStreamSynchronize(stream1));
+cudaCheckError(cudaStreamSynchronize(stream2));
 
-unsigned char *h_gray = new unsigned char[width * height];
-cudaCheckError(cudaMemcpy(h_gray, d_gray, sizeof(unsigned char) * width * height, cudaMemcpyDeviceToHost));
+/* Kernel check */
+//float *temp = new float[kernel_size * kernel_size];
+//cudaCheckError(cudaMemcpy(temp, d_kernel, sizeof(float) * kernel_size * kernel_size, cudaMemcpyDeviceToHost));
+//cv::Mat endresult(kernel_size, kernel_size, CV_8UC1, temp);
+//cv::imwrite(output, endresult);
 
-cv::Mat endresult(height, width, CV_8UC1, h_gray);
+//for (int i=0; i<kernel_size*kernel_size; ++i) {
+//    if ((i+1)%kernel_size == 0) {
+//        std::cout << temp[i] << std::endl;
+//    } else {
+//        std::cout << temp[i] << " ";
+//    }
+//}
+//std::cout << std::endl;
+
+unsigned char *out = new unsigned char[width * height];
+cudaCheckError(cudaMemcpy(out, d_blur, sizeof(unsigned char) * width * height, cudaMemcpyDeviceToHost));
+
+cv::Mat endresult(height, width, CV_8UC1, out);
 cv::imwrite(output, endresult);
 
 
-delete h_gray;
+delete out;
 
 
 }
